@@ -109,16 +109,27 @@ const Calendar: React.FC<CalendarProps> = ({ events, onDateClick, onEventClick, 
             <div 
               key={idx}
               onClick={() => onDateClick(day)}
-              className={`day-cell border-r border-b border-lime-50/20 p-1 flex flex-col items-center transition-all cursor-pointer min-h-[70px] sm:min-h-[100px] ${!isCurrentMonth ? 'bg-slate-50/10 opacity-30' : 'bg-white hover:bg-lime-50/30'}`}
+              className={`day-cell border-r border-b border-lime-50/20 p-1 flex flex-col items-center transition-all cursor-pointer min-h-[85px] sm:min-h-[110px] ${!isCurrentMonth ? 'bg-slate-50/10 opacity-30' : 'bg-white hover:bg-lime-50/30'}`}
             >
-              <span className={`text-[12px] font-semibold w-7 h-7 flex items-center justify-center rounded-xl mt-1 ${isToday ? 'bg-lime-400 text-white shadow-lg' : isCurrentMonth ? 'text-slate-700' : 'text-slate-300'} font-clean-cute tracking-tighter`}>
+              <span className={`text-[12px] font-semibold w-7 h-7 flex items-center justify-center rounded-xl mt-1 mb-1 ${isToday ? 'bg-lime-400 text-white shadow-lg' : isCurrentMonth ? 'text-slate-700' : 'text-slate-300'} font-clean-cute tracking-tighter`}>
                 {format(day, 'd')}
               </span>
-              <div className="mt-2 flex flex-col gap-1 w-full px-1.5 pb-1">
-                {dayEvents.slice(0, 2).map(event => (
-                  <div key={event.id} className={`${event.color} h-1.5 rounded-full shadow-sm`}></div>
+              
+              <div className="flex flex-col gap-1 w-full px-0.5 overflow-hidden">
+                {dayEvents.slice(0, 3).map(event => (
+                  <div 
+                    key={event.id} 
+                    onClick={(e) => { e.stopPropagation(); onEventClick(event); }}
+                    className={`${event.color} text-white text-[9px] px-1.5 py-0.5 rounded-lg truncate font-clean-cute tracking-wider shadow-sm shadow-lime-200/20 border border-white/20 active:scale-95 transition-transform`}
+                  >
+                    {event.name}
+                  </div>
                 ))}
-                {dayEvents.length > 2 && <div className="text-[8px] font-semibold text-slate-400 text-center font-clean-cute">+{dayEvents.length - 2}</div>}
+                {dayEvents.length > 3 && (
+                  <div className="text-[8px] font-bold text-slate-400 text-center font-clean-cute mt-0.5">
+                    + {dayEvents.length - 3}
+                  </div>
+                )}
               </div>
             </div>
           );

@@ -40,13 +40,13 @@ const TRANSLATIONS = {
     me: '我',
     tipTitle: '时光贴士',
     tipContent: '点击日期，AI提取灵感。🍎',
-    analyzing: '捕捉中...',
-    analyzingSub: '感受清新 🍏',
-    noImage: '请换个图识别 📸',
+    analyzing: '深度解析中...',
+    analyzingSub: '正在提取时间与地点 🍏',
+    noImage: '抱歉，无法识别此内容 📸',
     importAlbum: '相册导入',
     takePhoto: '拍摄照片',
     voiceInput: '语音输入',
-    listening: '请说话...',
+    listening: '请说话，我听着呢...',
     profileName: '时光旅人',
     profileBadge: '游客 🍃',
     premiumBadge: '云端同步员 🍏',
@@ -69,8 +69,8 @@ const TRANSLATIONS = {
     me: 'Me',
     tipTitle: 'Tip',
     tipContent: 'Click date, AI extracts. 🍎',
-    analyzing: 'Capturing...',
-    analyzingSub: 'Fresh vibes 🍏',
+    analyzing: 'Deep Analyzing...',
+    analyzingSub: 'Extracting details 🍏',
     noImage: 'Detection failed 📸',
     importAlbum: 'Album',
     takePhoto: 'Camera',
@@ -115,6 +115,68 @@ const App: React.FC = () => {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
   const t = TRANSLATIONS[lang];
+
+  // 语音输入逻辑
+  const handleVoiceInput = () => {
+    setShowCameraMenu(false);
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return alert("您的浏览器不支持语音识别。");
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = lang === 'zh' ? 'zh-CN' : 'en-US';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    
+    recognition.onresult = async (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setIsProcessing(true);
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+        const today = format(new Date(), 'yyyy-MM-dd, EEEE');
+        const response = await ai.models.generateContent({
+          model: 'gemini-3-flash-preview',
+          contents: `提取事件信息。语音原文："${transcript}"。参考时间：${today}。返回 JSON。`,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                date: { type: Type.STRING },
+                time: { type: Type.STRING },
+                location: { type: Type.STRING },
+                color: { type: Type.STRING },
+                duration: { type: Type.NUMBER },
+                repeat: { type: Type.STRING },
+              },
+              required: ["name", "date", "time"],
+            }
+          }
+        });
+        if (response.text) {
+          const extracted = JSON.parse(response.text);
+          setSelectedEvent({ ...extracted, id: undefined, repeat: extracted.repeat || 'none' });
+          setIsModalOpen(true);
+        }
+      } catch (err) { 
+        console.error(err); 
+        alert("识别失败，请重试。");
+      } finally { 
+        setIsProcessing(false); 
+      }
+    };
+
+    recognition.onerror = (e: any) => {
+      console.error(e);
+      setIsListening(false);
+      alert("语音启动失败，请检查麦克风权限。");
+    };
+
+    recognition.start();
+  };
 
   // 初始加载数据
   React.useEffect(() => {
@@ -173,7 +235,9 @@ const App: React.FC = () => {
       if (extracted) {
         setSelectedEvent({ ...extracted, id: undefined, repeat: extracted.repeat || 'none' });
         setIsModalOpen(true);
-      } else alert(t.noImage);
+      } else {
+        alert(t.noImage);
+      }
       setIsProcessing(false);
     };
     reader.readAsDataURL(file);
@@ -192,7 +256,6 @@ const App: React.FC = () => {
       return [...prev, newEvent];
     });
     
-    // 异步同步到服务器 (模拟后端)
     await apiService.syncEvent(newEvent);
     setIsSyncing(false);
   };
@@ -253,7 +316,7 @@ const App: React.FC = () => {
                           <Camera size={16} className="text-orange-500" />
                           <span className="text-[18px] font-medium font-clean-cute text-slate-700 tracking-wider">{t.takePhoto}</span>
                         </button>
-                        <button onClick={() => {}} className="w-full flex items-center gap-2.5 p-3 text-left hover:bg-blue-50 rounded-2xl transition-colors">
+                        <button onClick={handleVoiceInput} className="w-full flex items-center gap-2.5 p-3 text-left hover:bg-blue-50 rounded-2xl transition-colors">
                           <Mic size={16} className="text-blue-500" />
                           <span className="text-[18px] font-medium font-clean-cute text-slate-700 tracking-wider">{t.voiceInput}</span>
                         </button>
@@ -378,15 +441,29 @@ const App: React.FC = () => {
         lang={lang} 
       />
 
+      {isListening && (
+        <div className="fixed inset-0 z-[110] bg-blue-900/10 backdrop-blur-md flex items-center justify-center">
+          <div className="bg-white p-10 rounded-[4rem] shadow-2xl flex flex-col items-center gap-6 text-center border-4 border-blue-50 animate-in fade-in zoom-in">
+            <div className="relative">
+              <div className="absolute inset-0 bg-blue-400 rounded-full animate-ping opacity-20"></div>
+              <div className="p-6 bg-blue-500 text-white rounded-full shadow-lg relative z-10">
+                <Mic size={48} />
+              </div>
+            </div>
+            <h3 className="text-3xl font-bold text-slate-800 font-clean-cute tracking-widest">{t.listening}</h3>
+          </div>
+        </div>
+      )}
+
       {isProcessing && (
-        <div className="fixed inset-0 z-[60] bg-lime-900/10 backdrop-blur-xl flex items-center justify-center p-4">
-          <div className="bg-white p-8 rounded-[3rem] shadow-2xl flex flex-col items-center gap-5 text-center border-2 border-lime-50 max-w-xs w-full relative overflow-hidden">
-            <div className="w-20 h-20 bg-white rounded-2xl flex items-center justify-center animate-bounce shadow-xl shadow-lime-100/30">
+        <div className="fixed inset-0 z-[120] bg-lime-900/10 backdrop-blur-xl flex items-center justify-center p-4">
+          <div className="bg-white p-10 rounded-[3.5rem] shadow-2xl flex flex-col items-center gap-6 text-center border-4 border-lime-50 max-w-xs w-full relative overflow-hidden animate-in fade-in zoom-in">
+            <div className="w-24 h-24 bg-white rounded-[2rem] flex items-center justify-center animate-bounce shadow-xl shadow-lime-100/30">
               <CuteAppleIcon className="w-16 h-16" />
             </div>
-            <div className="space-y-1">
-              <h3 className="text-3xl font-medium text-slate-800 uppercase font-clean-cute tracking-widest">{t.analyzing}</h3>
-              <p className="text-[20px] text-slate-400 font-medium font-clean-cute tracking-wide">{t.analyzingSub}</p>
+            <div className="space-y-2">
+              <h3 className="text-3xl font-bold text-slate-800 uppercase font-clean-cute tracking-widest leading-tight">{t.analyzing}</h3>
+              <p className="text-[18px] text-lime-600/60 font-medium font-clean-cute tracking-wide">{t.analyzingSub}</p>
             </div>
           </div>
         </div>
