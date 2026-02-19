@@ -40,9 +40,10 @@ const TRANSLATIONS = {
     me: '我',
     tipTitle: '时光贴士',
     tipContent: '点击日期，AI提取灵感。🍎',
-    analyzing: '深度解析中...',
+    analyzing: '正在解析...',
+    compressing: '优化照片中...',
     analyzingSub: '正在提取时间与地点 🍏',
-    noImage: '抱歉，无法识别此内容 📸',
+    noImage: '抱歉，识别失败。请换张更清晰的照片📸',
     importAlbum: '相册导入',
     takePhoto: '拍摄照片',
     voiceInput: '语音输入',
@@ -61,7 +62,8 @@ const TRANSLATIONS = {
     energyDesc: (count: number) => `本月已记录 ${count} 个瞬间。`,
     defaultQuote: '今天也要像苹果一样清脆乐观！',
     syncing: '同步中...',
-    synced: '云端已安全'
+    synced: '云端已安全',
+    voiceError: '浏览器不支持语音或权限被拒 🎙️'
   },
   en: {
     title: 'Lumina',
@@ -69,9 +71,10 @@ const TRANSLATIONS = {
     me: 'Me',
     tipTitle: 'Tip',
     tipContent: 'Click date, AI extracts. 🍎',
-    analyzing: 'Deep Analyzing...',
+    analyzing: 'Analyzing...',
+    compressing: 'Optimizing...',
     analyzingSub: 'Extracting details 🍏',
-    noImage: 'Detection failed 📸',
+    noImage: 'Detection failed. Try clearer photo📸',
     importAlbum: 'Album',
     takePhoto: 'Camera',
     voiceInput: 'Voice Input',
@@ -90,7 +93,8 @@ const TRANSLATIONS = {
     energyDesc: (count: number) => `${count} moments captured.`,
     defaultQuote: 'Stay crisp and optimistic today!',
     syncing: 'Syncing...',
-    synced: 'Safe in Cloud'
+    synced: 'Safe in Cloud',
+    voiceError: 'Voice not supported or denied 🎙️'
   }
 };
 
@@ -107,6 +111,7 @@ const App: React.FC = () => {
   const [isAuthOpen, setIsAuthOpen] = React.useState(false);
   const [selectedEvent, setSelectedEvent] = React.useState<Partial<CalendarEvent>>({});
   const [isProcessing, setIsProcessing] = React.useState(false);
+  const [processingState, setProcessingState] = React.useState<'compressing' | 'analyzing'>('analyzing');
   const [isSyncing, setIsSyncing] = React.useState(false);
   const [isListening, setIsListening] = React.useState(false);
   const [showCameraMenu, setShowCameraMenu] = React.useState(false);
@@ -116,11 +121,46 @@ const App: React.FC = () => {
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
   const t = TRANSLATIONS[lang];
 
-  // 语音输入逻辑
+  // 压缩图片逻辑 (核心修复移动端上传)
+  const compressImage = (base64: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        const max = 1024; // 移动端 1024 宽足够 AI 识别
+
+        if (width > max || height > max) {
+          if (width > height) {
+            height = (height / width) * max;
+            width = max;
+          } else {
+            width = (width / height) * max;
+            height = max;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        // 输出 jpg 格式并降低质量以减小体积
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+    });
+  };
+
+  // 语音输入逻辑 (兼容性增强)
   const handleVoiceInput = () => {
     setShowCameraMenu(false);
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return alert("您的浏览器不支持语音识别。");
+    
+    if (!SpeechRecognition) {
+      alert(t.voiceError);
+      return;
+    }
 
     const recognition = new SpeechRecognition();
     recognition.lang = lang === 'zh' ? 'zh-CN' : 'en-US';
@@ -132,13 +172,14 @@ const App: React.FC = () => {
     
     recognition.onresult = async (event: any) => {
       const transcript = event.results[0][0].transcript;
+      setProcessingState('analyzing');
       setIsProcessing(true);
       try {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
         const today = format(new Date(), 'yyyy-MM-dd, EEEE');
         const response = await ai.models.generateContent({
           model: 'gemini-3-flash-preview',
-          contents: `提取事件信息。语音原文："${transcript}"。参考时间：${today}。返回 JSON。`,
+          contents: `提取事件 JSON。语音内容："${transcript}"。参考时间：${today}。`,
           config: {
             responseMimeType: "application/json",
             responseSchema: {
@@ -163,22 +204,26 @@ const App: React.FC = () => {
         }
       } catch (err) { 
         console.error(err); 
-        alert("识别失败，请重试。");
+        alert(t.noImage);
       } finally { 
         setIsProcessing(false); 
       }
     };
 
     recognition.onerror = (e: any) => {
-      console.error(e);
+      console.error("Speech Recognition Error:", e);
       setIsListening(false);
-      alert("语音启动失败，请检查麦克风权限。");
+      if (e.error === 'not-allowed') alert(t.voiceError);
     };
 
-    recognition.start();
+    try {
+      recognition.start();
+    } catch (e) {
+      console.error(e);
+      alert(t.voiceError);
+    }
   };
 
-  // 初始加载数据
   React.useEffect(() => {
     const load = async () => {
       const data = await apiService.fetchEvents(currentUser?.id || 'guest');
@@ -226,19 +271,33 @@ const App: React.FC = () => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
+    setProcessingState('compressing');
     setIsProcessing(true);
     setShowCameraMenu(false);
+
     const reader = new FileReader();
     reader.onload = async (event) => {
-      const base64 = event.target?.result as string;
-      const extracted = await extractEventFromImage(base64);
-      if (extracted) {
-        setSelectedEvent({ ...extracted, id: undefined, repeat: extracted.repeat || 'none' });
-        setIsModalOpen(true);
-      } else {
+      try {
+        const rawBase64 = event.target?.result as string;
+        // 压缩后再上传
+        const compressedBase64 = await compressImage(rawBase64);
+        
+        setProcessingState('analyzing');
+        const extracted = await extractEventFromImage(compressedBase64);
+        
+        if (extracted) {
+          setSelectedEvent({ ...extracted, id: undefined, repeat: extracted.repeat || 'none' });
+          setIsModalOpen(true);
+        } else {
+          alert(t.noImage);
+        }
+      } catch (err) {
+        console.error("File Upload Handling Error:", err);
         alert(t.noImage);
+      } finally {
+        setIsProcessing(false);
       }
-      setIsProcessing(false);
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -462,7 +521,9 @@ const App: React.FC = () => {
               <CuteAppleIcon className="w-16 h-16" />
             </div>
             <div className="space-y-2">
-              <h3 className="text-3xl font-bold text-slate-800 uppercase font-clean-cute tracking-widest leading-tight">{t.analyzing}</h3>
+              <h3 className="text-3xl font-bold text-slate-800 uppercase font-clean-cute tracking-widest leading-tight">
+                {processingState === 'compressing' ? t.compressing : t.analyzing}
+              </h3>
               <p className="text-[18px] text-lime-600/60 font-medium font-clean-cute tracking-wide">{t.analyzingSub}</p>
             </div>
           </div>
