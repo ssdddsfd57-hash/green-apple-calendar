@@ -1,0 +1,106 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lumina Calendar - AI Event Extractor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Caveat:wght@400;500;600;700&family=Long+Cang&family=ZCOOL+KuaiLe&family=ZCOOL+QingKe+HuangYou&family=Ma+Shan+Zheng&family=Liu+Jian+Mao+Cao&family=Zhi+Mang+Xing&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #fdfdf2;
+            overflow-x: hidden;
+            overflow-y: auto;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            -webkit-overflow-scrolling: touch;
+        }
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+        }
+        /* Primary Handwritten Style - Thin, readable, pen-like */
+        .font-handwritten {
+            font-family: 'Liu Jian Mao Cao', 'Caveat', 'Long Cang', cursive;
+            font-weight: 400;
+        }
+        /* Notes and Body text - Using the "Free" thin handwritten style */
+        .font-free {
+            font-family: 'Liu Jian Mao Cao', 'Caveat', 'Long Cang', cursive;
+            letter-spacing: 0.04em;
+        }
+        /* UI Titles and Accents - Bold Rounded (Matches "Black Sugar / Yuan Ti" style) */
+        .font-clean-cute {
+            font-family: 'ZCOOL KuaiLe', 'Liu Jian Mao Cao', cursive;
+            letter-spacing: 0.05em;
+        }
+        
+        /* Custom Select Styling */
+        .custom-select {
+            appearance: none;
+            background-color: #fefce8; 
+            border: 2px solid #bef264;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2384cc16'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2.5' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 0.75rem center;
+            background-size: 1rem;
+            transition: all 0.2s ease;
+            border-radius: 1.25rem;
+            outline: none !important;
+            box-shadow: none !important;
+            color: #334155;
+            cursor: pointer;
+        }
+
+        .custom-select:focus, .custom-select:active {
+            border-color: #84cc16; 
+            background-color: #fef9c3;
+        }
+
+        .paper-texture {
+            background-image: radial-gradient(#e5e7eb 0.5px, transparent 0.5px);
+            background-size: 20px 20px;
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        /* Custom Cuter Apple Animation */
+        .apple-wobble:hover {
+            animation: wobble 0.6s ease-in-out infinite alternate;
+        }
+        @keyframes wobble {
+            0% { transform: rotate(-5deg) scale(1.05); }
+            100% { transform: rotate(5deg) scale(1.1); }
+        }
+
+        .btn-active:active {
+            transform: scale(0.97);
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "lucide-react": "https://esm.sh/lucide-react@^0.564.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "date-fns": "https://esm.sh/date-fns@^4.1.0",
+    "date-fns/": "https://esm.sh/date-fns@^4.1.0/"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>

@@ -1,0 +1,8 @@
+{
+  "name": "Lumina Calendar - AI Event Extractor",
+  "description": "A sophisticated calendar application that uses Gemini AI to extract event details from images and screenshots, helping you organize your life effortlessly.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
