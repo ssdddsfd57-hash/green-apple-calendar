@@ -63,7 +63,7 @@ const TRANSLATIONS = {
     defaultQuote: '今天也要像苹果一样清脆乐观！',
     syncing: '同步中...',
     synced: '云端已安全',
-    voiceError: '浏览器不支持语音或权限被拒 🎙️'
+    voiceError: '当前环境不支持语音识别，请尝试系统浏览器（如 Safari/Chrome）🍏'
   },
   en: {
     title: 'Lumina',
@@ -94,7 +94,7 @@ const TRANSLATIONS = {
     defaultQuote: 'Stay crisp and optimistic today!',
     syncing: 'Syncing...',
     synced: 'Safe in Cloud',
-    voiceError: 'Voice not supported or denied 🎙️'
+    voiceError: 'Voice recognition not supported here. Try Safari or Chrome. 🍏'
   }
 };
 
@@ -121,16 +121,18 @@ const App: React.FC = () => {
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
   const t = TRANSLATIONS[lang];
 
-  // 压缩图片逻辑 (核心修复移动端上传)
-  const compressImage = (base64: string): Promise<string> => {
-    return new Promise((resolve) => {
+  // 更鲁棒的移动端图片压缩 (使用 URL.createObjectURL 节省内存)
+  const compressImage = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
       const img = new Image();
-      img.src = base64;
+      const objectUrl = URL.createObjectURL(file);
+      img.src = objectUrl;
       img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
         const canvas = document.createElement('canvas');
         let width = img.width;
         let height = img.height;
-        const max = 1024; // 移动端 1024 宽足够 AI 识别
+        const max = 800; // 进一步减小尺寸以提升移动端成功率
 
         if (width > max || height > max) {
           if (width > height) {
@@ -145,14 +147,17 @@ const App: React.FC = () => {
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
-        ctx?.drawImage(img, 0, 0, width, height);
-        // 输出 jpg 格式并降低质量以减小体积
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
+        if (!ctx) return reject('Canvas error');
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7)); // 降低质量到 0.7
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(objectUrl);
+        reject('Image load error');
       };
     });
   };
 
-  // 语音输入逻辑 (兼容性增强)
   const handleVoiceInput = () => {
     setShowCameraMenu(false);
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -162,61 +167,62 @@ const App: React.FC = () => {
       return;
     }
 
-    const recognition = new SpeechRecognition();
-    recognition.lang = lang === 'zh' ? 'zh-CN' : 'en-US';
-    recognition.interimResults = false;
-    recognition.maxAlternatives = 1;
-
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    
-    recognition.onresult = async (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setProcessingState('analyzing');
-      setIsProcessing(true);
-      try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
-        const today = format(new Date(), 'yyyy-MM-dd, EEEE');
-        const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
-          contents: `提取事件 JSON。语音内容："${transcript}"。参考时间：${today}。`,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                date: { type: Type.STRING },
-                time: { type: Type.STRING },
-                location: { type: Type.STRING },
-                color: { type: Type.STRING },
-                duration: { type: Type.NUMBER },
-                repeat: { type: Type.STRING },
-              },
-              required: ["name", "date", "time"],
-            }
-          }
-        });
-        if (response.text) {
-          const extracted = JSON.parse(response.text);
-          setSelectedEvent({ ...extracted, id: undefined, repeat: extracted.repeat || 'none' });
-          setIsModalOpen(true);
-        }
-      } catch (err) { 
-        console.error(err); 
-        alert(t.noImage);
-      } finally { 
-        setIsProcessing(false); 
-      }
-    };
-
-    recognition.onerror = (e: any) => {
-      console.error("Speech Recognition Error:", e);
-      setIsListening(false);
-      if (e.error === 'not-allowed') alert(t.voiceError);
-    };
-
     try {
+      const recognition = new SpeechRecognition();
+      recognition.lang = lang === 'zh' ? 'zh-CN' : 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => setIsListening(true);
+      recognition.onend = () => setIsListening(false);
+      
+      recognition.onresult = async (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setProcessingState('analyzing');
+        setIsProcessing(true);
+        try {
+          const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || "" });
+          const today = format(new Date(), 'yyyy-MM-dd, EEEE');
+          const response = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: `提取事件 JSON。语音内容："${transcript}"。参考时间：${today}。`,
+            config: {
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  name: { type: Type.STRING },
+                  date: { type: Type.STRING },
+                  time: { type: Type.STRING },
+                  location: { type: Type.STRING },
+                  color: { type: Type.STRING },
+                  duration: { type: Type.NUMBER },
+                  repeat: { type: Type.STRING },
+                },
+                required: ["name", "date", "time"],
+              }
+            }
+          });
+          if (response.text) {
+            const extracted = JSON.parse(response.text);
+            setSelectedEvent({ ...extracted, id: undefined, repeat: extracted.repeat || 'none' });
+            setIsModalOpen(true);
+          }
+        } catch (err) { 
+          console.error(err); 
+          alert(t.noImage);
+        } finally { 
+          setIsProcessing(false); 
+        }
+      };
+
+      recognition.onerror = (e: any) => {
+        console.error("Speech Recognition Error:", e);
+        setIsListening(false);
+        if (e.error === 'not-allowed') alert(t.voiceError);
+        else if (e.error === 'network') alert('Network connection issue for voice.');
+      };
+
       recognition.start();
     } catch (e) {
       console.error(e);
@@ -276,31 +282,26 @@ const App: React.FC = () => {
     setIsProcessing(true);
     setShowCameraMenu(false);
 
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const rawBase64 = event.target?.result as string;
-        // 压缩后再上传
-        const compressedBase64 = await compressImage(rawBase64);
-        
-        setProcessingState('analyzing');
-        const extracted = await extractEventFromImage(compressedBase64);
-        
-        if (extracted) {
-          setSelectedEvent({ ...extracted, id: undefined, repeat: extracted.repeat || 'none' });
-          setIsModalOpen(true);
-        } else {
-          alert(t.noImage);
-        }
-      } catch (err) {
-        console.error("File Upload Handling Error:", err);
+    try {
+      // 优化：直接传入 file 进行压缩，不再先转大字符串
+      const compressedBase64 = await compressImage(file);
+      
+      setProcessingState('analyzing');
+      const extracted = await extractEventFromImage(compressedBase64);
+      
+      if (extracted) {
+        setSelectedEvent({ ...extracted, id: undefined, repeat: extracted.repeat || 'none' });
+        setIsModalOpen(true);
+      } else {
         alert(t.noImage);
-      } finally {
-        setIsProcessing(false);
       }
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
+    } catch (err) {
+      console.error("File Handling Error:", err);
+      alert(t.noImage);
+    } finally {
+      setIsProcessing(false);
+      e.target.value = '';
+    }
   };
 
   const saveEvent = async (newEvent: CalendarEvent) => {
